@@ -28,6 +28,8 @@ def generate_tag_vocab(
             or 'dev' in data_bundle.datasets.keys() \
             or 'test' in data_bundle.datasets.keys():
         vocab: Dict = {}
+        if 'joint' not in vocab.keys():
+            vocab['joint'] = Vocabulary(padding=None, unknown=unknown)
 
         def construct_vocab(instance: Instance):
             # 当然，用来 infer 的数据集是无法构建的，这里判断一下
@@ -36,9 +38,16 @@ def generate_tag_vocab(
                     vocab['entity'] = Vocabulary(padding=None, unknown=unknown)
                 for entity_mention in instance['entity_mentions']:
                     vocab['entity'].add(entity_mention[1])
-            else:
-                # TODO: 增加新的标签种类
-                ...
+                    vocab['joint'].add(entity_mention[1])
+            if 'relation_mentions' in instance.keys():
+                if 'relation' not in vocab.keys():
+                    vocab['relation'] = Vocabulary(padding=None,
+                                                   unknown=unknown)
+                for relation_mention in instance['relation_mentions']:
+                    vocab['relation'].add(relation_mention[2])
+                    vocab['joint'].add(relation_mention[2])
+            # TODO: 增加新的标签种类
+            ...
             return instance
 
         data_bundle.apply_more(construct_vocab)
@@ -120,9 +129,9 @@ def check_loaded_tag_vocab(
                     tag_vocab._word2idx.update(word2idx)
                     tag_vocab._idx2word.update(idx2word)
                     return 1, tag_vocab
-                elif set(tag_vocab.word2idx.keys()  # type: ignore [union-attr]
-                         ).issubset(set(
-                             word2idx.keys())):  # type: ignore [union-attr]
+                elif set(
+                        tag_vocab._word2idx.keys()  # type: ignore [union-attr]
+                ).issubset(set(tag_vocab._word2idx.keys())):
                     tag_vocab._word2idx.update(word2idx)
                     tag_vocab._idx2word.update(idx2word)
                     return 1, tag_vocab
