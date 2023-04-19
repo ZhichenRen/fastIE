@@ -1,14 +1,11 @@
-"""Base class for NER tasks."""
+"""Base class for RE tasks."""
 __all__ = ['BaseRETask', 'BaseRETaskConfig']
-from fastie.tasks.BaseTask import BaseTask, BaseTaskConfig
+from fastie.tasks.base_task import BaseTask, BaseTaskConfig
 from fastie.utils.utils import generate_tag_vocab, check_loaded_tag_vocab
-from fastie.envs import logger
-
+from fastie.envs import logger, get_flag
 from fastNLP import Vocabulary
 from fastNLP.io import DataBundle
-
 import abc
-
 from typing import Dict, Union, Sequence, Optional
 
 
@@ -47,24 +44,26 @@ class BaseRETask(BaseTask, metaclass=abc.ABCMeta):
     """
 
     _config = BaseRETaskConfig()
-    _help = 'Base class for NER tasks. '
+    _help = 'Base class for RE tasks. '
 
     def __init__(self,
                  load_model: str = '',
                  save_model_folder: str = '',
                  batch_size: int = 32,
-                 epochs: int = 20,
-                 monitor: str = '',
+                 epochs: int = 200,
+                 monitor: str = 'F-1#relation',
                  is_large_better: bool = True,
                  topk: int = 0,
-                 load_best_model: bool = False,
+                 topk_folder: str = '',
                  fp16: bool = False,
                  evaluate_every: int = -1,
                  device: Union[int, Sequence[int], str] = 'cpu',
+                 use_strict: bool = True,
                  **kwargs):
         super().__init__(load_model, save_model_folder, batch_size, epochs,
-                         monitor, is_large_better, topk, load_best_model, fp16,
+                         monitor, is_large_better, topk, topk_folder, fp16,
                          evaluate_every, device, **kwargs)
+        self.use_strict = use_strict
 
     def on_generate_and_check_tag_vocab(self,
                                         data_bundle: DataBundle,
@@ -79,28 +78,29 @@ class BaseRETask(BaseTask, metaclass=abc.ABCMeta):
         :param state_dict: 加载模型得到的 ``state_dict``，可能为 ``None``
         :return: 标签词典，可能为 ``None``
         """
-        tag_vocab = None
+        tag_vocab = {}
         if state_dict is not None and 'tag_vocab' in state_dict:
-            loaded_tag_vocab = state_dict['tag_vocab']
-
-        tag_vocab = generate_tag_vocab(data_bundle)
-        # 这里需要分别检查entity，relation和all
-        signal, entity_vocab = check_loaded_tag_vocab(
-            loaded_tag_vocab=loaded_tag_vocab['entity'],
-            tag_vocab=tag_vocab['entity'])
-        signal, relation_vocab = check_loaded_tag_vocab(
-            loaded_tag_vocab=loaded_tag_vocab['relation'],
-            tag_vocab=tag_vocab['relation'])
-        signal, joint_vocab = check_loaded_tag_vocab(
-            loaded_tag_vocab=loaded_tag_vocab['joint'],
-            tag_vocab=tag_vocab['joint'])
-
-        tag_vocab['entity'] = entity_vocab
-        tag_vocab['relation'] = relation_vocab
-        tag_vocab['joint'] = joint_vocab
-
-        if signal == -1:
-            logger.warning('It is detected that the model label vocabulary '
-                           'conflicts with the dataset label vocabulary, '
-                           'so the model loading may fail. ')
-        return tag_vocab
+            tag_vocab = state_dict['tag_vocab']
+        generated_tag_vocab = {}
+        if get_flag() == 'train':
+            generated_tag_vocab = generate_tag_vocab(data_bundle,
+                                                     unknown='None')
+        else:
+            if 'entity' not in tag_vocab.keys() or 'relation' not in tag_vocab.keys() or 'joint' not in tag_vocab.keys():
+                generated_tag_vocab = generate_tag_vocab(data_bundle,
+                                                         unknown='None')
+        for key, value in tag_vocab.items():
+            if key not in generated_tag_vocab.keys():
+                generated_tag_vocab[key] = check_loaded_tag_vocab(value,
+                                                                  None)[1]
+            else:
+                logger.info(f'Checking tag vocab {key}...')
+                signal, generated_tag_vocab[key] = check_loaded_tag_vocab(
+                    value, generated_tag_vocab[key])
+                if signal == -1:
+                    logger.warning(
+                        f'It is detected that the loaded ``{key}`` vocabulary '
+                        f'conflicts with the generated ``{key}`` vocabulary, '
+                        f'so the model loading may fail. ')
+                logger.info('Check finished!')
+        return generated_tag_vocab

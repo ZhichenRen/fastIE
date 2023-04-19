@@ -3,12 +3,13 @@ __all__ = ['JsonLinesRE', 'JsonLinesREConfig']
 import json
 import os
 
-from fastie.dataset.BaseDataset import BaseDataset, DATASET, BaseDatasetConfig
+from fastie.dataset.base_dataset import BaseDataset, DATASET, BaseDatasetConfig
 
 from fastNLP import DataSet, Instance
 from fastNLP.io import Loader, DataBundle
 
 from dataclasses import dataclass, field
+from typing import List
 
 
 @dataclass
@@ -30,7 +31,7 @@ class JsonLinesREConfig(BaseDatasetConfig):
 
 @DATASET.register_module('jsonlines-re')
 class JsonLinesRE(BaseDataset):
-    """JsonLinesNER dataset for FastIE. Each row has a NER sample in json
+    """JsonLinesRE dataset for FastIE. Each row has a sample in json
     format:
 
     .. code-block:: json
@@ -47,13 +48,9 @@ class JsonLinesRE(BaseDataset):
 
     .. code-block:: json
         {
-            "tokens": ["I", "love", "FastIE", "."],
-            "entity_mentions": [
-                {
-                    "start": 2,
-                    "end": 3,
-                    "entity_type": "MISC"
-                },
+            "sentences": [["I", "love", "FastIE", "."]],
+            "ner": [[2, 3, "Task"], [4, 5, "Task"]],
+            "relations": [[2, 3, 4, 5, "PART-OF"]]
         }
 
     :param folder: The folder where the data set resides.
@@ -63,11 +60,12 @@ class JsonLinesRE(BaseDataset):
     :param refresh_cache: Whether to refresh the cache.
     """
     _config = JsonLinesREConfig()
-    _help = 'JsonLinesNER dataset for FastIE. Each row has a NER sample in json format. '
+    _help = 'JsonLinesRE dataset for FastIE. Each row has a sample in json format. '
 
     def __init__(self,
                  folder: str = '',
                  right_inclusive: bool = False,
+                 symmetric_label: List[str] = [],
                  cache: bool = False,
                  refresh_cache: bool = False,
                  **kwargs):
@@ -77,17 +75,20 @@ class JsonLinesRE(BaseDataset):
                              **kwargs)
         self.folder = folder
         self.right_inclusive = right_inclusive
+        self.symmetric_label = symmetric_label
 
     def run(self) -> DataBundle:
 
         class UnifiedRELoader(Loader):
 
-            def __init__(self) -> None:
+            def __init__(self, symmetric_label: List[str]) -> None:
                 super(UnifiedRELoader, self).__init__()
+                self.symmetric_label = symmetric_label
 
             def _load(self, path):
                 ds = DataSet()
                 with open(path, 'r', encoding='utf-8') as fin:
+                    doc_id = 0
                     for line in fin:
                         raw_sentences = json.loads(line.strip())
                         if (len(raw_sentences) > 0):
@@ -101,8 +102,11 @@ class JsonLinesRE(BaseDataset):
                                 for ner in ners:
                                     ner[0] -= sent_start
                                     ner[1] -= sent_start
+                                    assert ner[0] >= 0 and ner[1] < len(
+                                        sents
+                                    ), f'sentence len: {len(sents[sent_id])}, ner[0]: {ner[0]}, ner[1]: {ner[1]}'
                                     processed_ners.append(
-                                        ((ner[0], ner[1]), ner[2]))
+                                        ((ner[0], ner[1] + 1), ner[2]))
 
                                 for rel in rels:
                                     rel[0] -= sent_start
@@ -110,24 +114,29 @@ class JsonLinesRE(BaseDataset):
                                     rel[2] -= sent_start
                                     rel[3] -= sent_start
                                     processed_rels.append(
-                                        ((rel[0], rel[1]), (rel[2], rel[3]),
-                                         rel[4]))
+                                        ((rel[0], rel[1] + 1),
+                                         (rel[2], rel[3] + 1), rel[4]))
+                                    if rel[4] in self.symmetric_label:
+                                        processed_rels.append(
+                                            ((rel[2], rel[3] + 1),
+                                             (rel[0], rel[1] + 1), rel[4]))
+                                doc_key = raw_sentences[
+                                    'doc_key'] if 'doc_key' in raw_sentences else doc_id
                                 ds.append(
-                                    Instance(
-                                        sent_id=sent_id,
-                                        tokens=sents,
-                                        tokens_len=len(sents),
-                                        entity_mentions=processed_ners,
-                                        relation_mentions=processed_rels,
-                                        doc_key=raw_sentences['doc_key'],
-                                        clusters=raw_sentences['clusters']))
+                                    Instance(sent_id=sent_id,
+                                             tokens=sents,
+                                             entity_mentions=processed_ners,
+                                             relation_mentions=processed_rels,
+                                             doc_key=doc_key))
 
                                 sent_start += len(sents)
-                    return ds
+                        doc_id += 1
+                return ds
 
-        data_bundle = UnifiedRELoader().load({
-            file: os.path.join(self.folder, f'{file}.jsonl')
-            for file in ('train', 'dev', 'test', 'infer')
-            if os.path.exists(os.path.join(self.folder, f'{file}.jsonl'))
-        })
+        data_bundle = UnifiedRELoader(
+            symmetric_label=self.symmetric_label).load({
+                file: os.path.join(self.folder, f'{file}.jsonl')
+                for file in ('train', 'dev', 'test', 'infer')
+                if os.path.exists(os.path.join(self.folder, f'{file}.jsonl'))
+            })
         return data_bundle

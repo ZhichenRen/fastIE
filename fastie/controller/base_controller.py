@@ -69,13 +69,15 @@ class BaseController(BaseNode):
         """
         if callable(parameters_or_data):
             parameters_or_data = parameters_or_data()
-        if isinstance(parameters_or_data, Generator) and hasattr(
-                parameters_or_data, '__qualname__'):
-            if parameters_or_data.__qualname__ == 'SequentialTask.run':  # type: ignore [attr-defined]
+        if isinstance(parameters_or_data, Generator):
+            if hasattr(
+                    parameters_or_data, '__qualname__'
+            ) and parameters_or_data.__qualname__ == 'SequentialTask.run':  # type: ignore [attr-defined]
                 self._sequential = True
             parameters_or_data = next(parameters_or_data)
-        if isinstance(parameters_or_data, dict) \
-                and 'model' in parameters_or_data.keys():
+        if self._sequential or (isinstance(parameters_or_data, dict)
+                                and 'model' in parameters_or_data.keys()):
+            # 如果parameters_or_data是序列任务的结果或者一组包含模型的可执行参数，则直接返回结果
             return parameters_or_data
         else:
             # 下面的是直接传入数据集的情况，需要根据 global_config 构建 task
@@ -83,6 +85,10 @@ class BaseController(BaseNode):
                                         dataset_config=self._overload_config)
             parameters_or_data = build_task(self._overload_config)(data_bundle)
             if isinstance(parameters_or_data, Generator):
+                if hasattr(
+                        parameters_or_data, '__qualname__'
+                ) and parameters_or_data.__qualname__ == 'SequentialTask.run':  # type: ignore [attr-defined]
+                    self._sequential = True
                 parameters_or_data = next(parameters_or_data)
             return parameters_or_data
 

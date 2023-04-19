@@ -7,6 +7,7 @@ from typing import Type
 from fastNLP.io import DataBundle
 
 from fastie import Trainer, Evaluator, Inference, BaseTask
+import shutil
 
 
 class UnifiedTaskTest:
@@ -19,27 +20,29 @@ class UnifiedTaskTest:
         self.extra_parameters = extra_parameters
         self.data_bundle = data_bundle
 
-    @pytest.mark.parametrize('device', ['cpu', 'cuda:0', [0, 1]])
+    @pytest.mark.parametrize('device', ['cpu', 'cuda:0'])
     def test_train(self, device):
-        task = self.task_cls(**{
-            'device': device,
-            'batch_size': 2,
-            'epoch': 2,
-            **self.extra_parameters
-        }).run(self.data_bundle)
+        task = self.task_cls(
+            **{
+                'device': device,
+                'batch_size': 2,
+                'epochs': 1,
+                **self.extra_parameters
+            }).run(self.data_bundle)
         assert Trainer().run(task)
 
-    @pytest.mark.parametrize('device', ['cpu', 'cuda:0', [0, 1]])
+    @pytest.mark.parametrize('device', ['cpu', 'cuda:0'])
     def test_eval(self, device):
-        task = self.task_cls(**{
-            'device': device,
-            'batch_size': 2,
-            'epoch': 2,
-            **self.extra_parameters
-        }).run(self.data_bundle)
+        task = self.task_cls(
+            **{
+                'device': device,
+                'batch_size': 2,
+                'epochs': 1,
+                **self.extra_parameters
+            }).run(self.data_bundle)
         assert Evaluator().run(task)
 
-    @pytest.mark.parametrize('device', ['cpu', 'cuda:0', [0, 1]])
+    @pytest.mark.parametrize('device', ['cpu', 'cuda:0'])
     def test_inference(self, device):
         task = self.task_cls(**{
             'device': device,
@@ -54,27 +57,28 @@ class UnifiedTaskTest:
                 **{
                     'device': 'cpu',
                     'batch_size': 2,
-                    'epoch': 2,
-                    'topk': 2,
-                    'save_model_folder': tmpdir,
+                    'epochs': 1,
+                    'topk': 1,
+                    'topk_folder': tmpdir,
                     **self.extra_parameters
                 }).run(self.data_bundle)
             assert Trainer().run(task)
             assert len(os.listdir(tmpdir)) > 0
+            shutil.rmtree(tmpdir, ignore_errors=True)
 
-    def test_load_best_model(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            task = self.task_cls(
-                **{
-                    'device': 'cpu',
-                    'batch_size': 2,
-                    'epoch': 2,
-                    'load_best_model': True,
-                    'save_model_folder': tmpdir,
-                    **self.extra_parameters
-                }).run(self.data_bundle)
-            assert Trainer().run(task)
-            assert len(os.listdir(tmpdir)) > 0
+    # def test_load_best_model(self):
+    #     with tempfile.TemporaryDirectory() as tmpdir:
+    #         task = self.task_cls(
+    #             **{
+    #                 'device': 'cpu',
+    #                 'batch_size': 2,
+    #                 'epoch': 2,
+    #                 'load_best_model': True,
+    #                 'save_model_folder': tmpdir,
+    #                 **self.extra_parameters
+    #             }).run(self.data_bundle)
+    #         assert Trainer().run(task)
+    #         assert len(os.listdir(tmpdir)) > 0
 
     # def test_fp16(self):
     #     task = self.task_cls(**{

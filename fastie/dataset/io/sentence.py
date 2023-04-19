@@ -50,6 +50,7 @@ class Sentence(BaseDataset):
         sentences = [self.sentence] if isinstance(self.sentence,
                                                   str) else self.sentence
         for sentence in sentences:
-            dataset.append(Instance(tokens=sentence.split(' ')))
+            dataset.append(
+                Instance(tokens=sentence.split(' '), doc_key=0, sent_id=0))
         data_bundle = DataBundle(datasets={'infer': dataset})
         return data_bundle

@@ -19,7 +19,8 @@ class SequentialTaskConfig(BaseNodeConfig):
 
 class SequentialTask(BaseNode, metaclass=ABCMeta):
 
-    def __init__(self):
+    def __init__(self, **kwargs):
+        BaseNode.__init__(self, **kwargs)
         self._tasks: List[BaseTask] = []
 
     @abstractmethod
@@ -44,12 +45,13 @@ class SequentialTask(BaseNode, metaclass=ABCMeta):
         """
 
     def run(self, data_bundle: DataBundle):
-        if get_flag() == 'train':
-            return self.on_train(data_bundle)
-        elif get_flag() == 'eval':
-            return self.on_eval(data_bundle)
-        elif get_flag() == 'infer':
-            return self.on_infer(data_bundle)
+        while True:
+            if get_flag() == 'train':
+                yield from self.on_train(data_bundle)
+            elif get_flag() == 'eval':
+                yield from self.on_eval(data_bundle)
+            elif get_flag() == 'infer':
+                yield from self.on_infer(data_bundle)
 
     def __call__(self, *args, **kwargs):
         return self.run(*args, **kwargs)

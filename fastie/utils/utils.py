@@ -50,7 +50,7 @@ def generate_tag_vocab(
             ...
             return instance
 
-        data_bundle.apply_more(construct_vocab)
+        data_bundle.apply_more(construct_vocab, progress_desc='Generate tag_vocab')
         for key, value in vocab.items():
             if base_mapping and key in base_mapping.keys():
                 base_word2idx = {}
@@ -251,3 +251,45 @@ def inspect_metrics(parameters: dict = {}) -> List[str]:
     except Exception as e:
         logger.error(e)
         return []
+
+
+def add_cross_sentence(instances, cross_sent_window):
+    result = []
+    for i, instance in enumerate(instances):
+        tokens = instance['tokens']
+        tokens_len = len(tokens)
+        sent_start = 0
+
+        if tokens_len >= cross_sent_window:
+            result.append({
+                'cross_sent_tokens': tokens,
+                'sent_start': sent_start
+            })
+            continue
+
+        add_left = (cross_sent_window - tokens_len) // 2
+        add_right = (cross_sent_window - tokens_len) - add_left
+        cross_sent_tokens = tokens
+
+        j = i - 1
+        while j >= 0 and add_left > 0 and instance[
+                'doc_key'] == instances.doc_key[j]:
+            left_tokens = instances.tokens[j][-add_left:]
+            add_left -= len(left_tokens)
+            cross_sent_tokens = left_tokens + cross_sent_tokens
+            sent_start += len(left_tokens)
+            j -= 1
+
+        j = i + 1
+        while j < len(instances) and instance['doc_key'] == instances.doc_key[
+                j] and add_right > 0:
+            right_tokens = instances.tokens[j][:add_right]
+            add_right -= len(right_tokens)
+            cross_sent_tokens += right_tokens
+            j += 1
+
+        result.append({
+            'cross_sent_tokens': cross_sent_tokens,
+            'sent_start': sent_start
+        })
+    return result

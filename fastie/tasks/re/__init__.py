@@ -1,4 +1,11 @@
 from .unire import UniRETask, UniREConfig
-from .BaseRETask import BaseRETask, BaseRETaskConfig
+from .tplinker import TPLinkerTask, TPLinkerConfig
+from .pure import PUREEntityTask, PUREEntityConfig, PURERelationTask, PURERelationConfig, PUREJointTask, PUREJointConfig
+from .base_re_task import BaseRETask, BaseRETaskConfig
 
-__all__ = ['UniRETask', 'UniREConfig', 'BaseRETaskConfig', 'BaseRETask']
+__all__ = [
+    'UniRETask', 'UniREConfig', 'TPLinkerTask', 'TPLinkerConfig',
+    'PUREEntityTask', 'PUREEntityConfig', 'PURERelationTask',
+    'PURERelationConfig', 'PUREJointTask', 'PUREJointConfig',
+    'BaseRETaskConfig', 'BaseRETask'
+]

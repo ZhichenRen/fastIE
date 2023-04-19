@@ -46,29 +46,30 @@ class InferenceMetric(Metric):
                 # 判断一下不同的格式
                 # 首先是 NER 小组约定的格式
                 if 'entity_mentions' in sample.keys():
-                    print('tokens: ', ' '.join(sample['tokens']))
-                    print(
-                        'pred:   ', ' '.join([
-                            sample['tokens'][i] if i
-                            in sample['entity_mentions'][0][0] else ''.join(
-                                [' ' for j in range(len(sample['tokens'][i]))])
-                            for i in range(len(sample['tokens']))
-                        ]), f"  {sample['entity_mentions'][0][1]} -> "
-                        f"{sample['entity_mentions'][0][2]}"
-                        if len(sample['entity_mentions'][0]) >= 3 else
-                        f"  {sample['entity_mentions'][0][1]}")
-                    if len(sample['entity_mentions']) > 1:
-                        for entity_mention in sample['entity_mentions'][1:]:
-                            print(
-                                '        ', ' '.join([
-                                    sample['tokens'][i]
-                                    if i in entity_mention[0] else ''.join([
-                                        ' ' for j in range(
-                                            len(sample['tokens'][i]))
-                                    ]) for i in range(len(sample['tokens']))
-                                ]), f'  {entity_mention[1]} -> '
-                                f'{entity_mention[2]}' if len(entity_mention)
-                                == 3 else f'  {entity_mention[1]}')
+                    # print('tokens: ', ' '.join(sample['tokens']))
+                    # print(
+                    #     'pred:   ', ' '.join([
+                    #         sample['tokens'][i] if i
+                    #         in sample['entity_mentions'][0][0] else ''.join(
+                    #             [' ' for j in range(len(sample['tokens'][i]))])
+                    #         for i in range(len(sample['tokens']))
+                    #     ]), f"  {sample['entity_mentions'][0][1]} -> "
+                    #     f"{sample['entity_mentions'][0][2]}"
+                    #     if len(sample['entity_mentions'][0]) >= 3 else
+                    #     f"  {sample['entity_mentions'][0][1]}")
+                    # if len(sample['entity_mentions']) > 1:
+                    #     for entity_mention in sample['entity_mentions'][1:]:
+                    #         print(
+                    #             '        ', ' '.join([
+                    #                 sample['tokens'][i]
+                    #                 if i in entity_mention[0] else ''.join([
+                    #                     ' ' for j in range(
+                    #                         len(sample['tokens'][i]))
+                    #                 ]) for i in range(len(sample['tokens']))
+                    #             ]), f'  {entity_mention[1]} -> '
+                    #             f'{entity_mention[2]}' if len(entity_mention)
+                    #             == 3 else f'  {entity_mention[1]}')
+                    pass
                 else:
                     # TODO: 其他类型的格式，例如为关系抽取小组制定的格式
                     pass

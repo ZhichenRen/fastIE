@@ -45,11 +45,17 @@ def build_dataset(dataset: Optional[Union[str, Sequence[str], dict,
     else:
         if isinstance(dataset, str) or isinstance(dataset, Sequence) \
                 and isinstance(dataset[0], str):
+            # infer only
             data_bundle = Sentence(dataset)()  # type: ignore [arg-type]
+            return data_bundle
         if isinstance(dataset, dict):
             dataset = [dataset]
         if isinstance(dataset, Sequence) and isinstance(dataset[0], dict):
             dataset = DataSet([Instance(**sample) for sample in dataset])
+        if not dataset.has_field('doc_key'):
+            dataset.add_field('doc_key', list(range(len(dataset))))
+        if not dataset.has_field('sent_id'):
+            dataset.add_field('sent_id', list(range(len(dataset))))
         if isinstance(dataset, DataSet):
             if get_flag() == 'train':
                 data_bundle = DataBundle(datasets={'train': dataset})

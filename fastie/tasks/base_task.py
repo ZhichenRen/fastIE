@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from typing import Sequence, Union, Generator, Optional, Any, Dict
 
 from fastNLP import Vocabulary, Callback, prepare_dataloader
-from fastNLP.core.callbacks import CheckpointCallback
+from fastNLP.core.callbacks import CheckpointCallback, LoadBestModelCallback
 from fastNLP.io import DataBundle
 
 from fastie.envs import get_flag, logger
@@ -123,6 +123,7 @@ class BaseTask(BaseNode, metaclass=abc.ABCMeta):
 
     def __init__(self,
                  load_model: str = '',
+                 save_model_folder: str = '',
                  batch_size: int = 32,
                  epochs: int = 20,
                  monitor: str = '',
@@ -135,6 +136,7 @@ class BaseTask(BaseNode, metaclass=abc.ABCMeta):
                  **kwargs):
         BaseNode.__init__(self, **kwargs)
         self.load_model = load_model
+        self.save_model_folder = save_model_folder
         self.epochs = epochs
         self.topk = topk
         self.topk_folder = topk_folder
@@ -370,7 +372,8 @@ class BaseTask(BaseNode, metaclass=abc.ABCMeta):
     def _run_generator(self):
 
         def run(data_bundle: DataBundle):
-            self.refresh_cache()
+            if get_flag() == 'train':
+                self.refresh_cache()
 
             def run_warp(data_bundle: DataBundle):
                 if isinstance(data_bundle, BaseDataset):
@@ -380,6 +383,8 @@ class BaseTask(BaseNode, metaclass=abc.ABCMeta):
 
                 if self.load_model != '':
                     self._on_get_state_dict_cache = Hub.load(self.load_model)
+                else:
+                    self._on_get_state_dict_cache = dict()
 
                 # 生命周期开始
                 # 不易变的部分
@@ -389,9 +394,22 @@ class BaseTask(BaseNode, metaclass=abc.ABCMeta):
                             data_bundle=data_bundle,
                             state_dict=self._on_get_state_dict_cache)
                 if not self._on_dataset_preprocess_cache:
+                    if get_flag() == 'eval':
+                        new_databundle = DataBundle(
+                            datasets={'test': data_bundle.get_dataset('test')})
+                        if 'infer' in data_bundle.get_dataset_names():
+                            new_databundle.set_dataset(
+                                data_bundle.get_dataset('infer'), 'infer')
+                    elif get_flag() == 'infer':
+                        new_databundle = DataBundle(
+                            datasets={
+                                'infer': data_bundle.get_dataset('infer')
+                            })
+                    else:
+                        new_databundle = data_bundle
                     self._on_dataset_preprocess_cache = \
                         self.on_dataset_preprocess(
-                            data_bundle=data_bundle,
+                            data_bundle=new_databundle,
                             tag_vocab=self._on_generate_and_check_tag_vocab_cache,
                             state_dict=self._on_get_state_dict_cache)
                 if not self._on_setup_model_cache:
@@ -400,6 +418,11 @@ class BaseTask(BaseNode, metaclass=abc.ABCMeta):
                             data_bundle=self._on_dataset_preprocess_cache,
                             tag_vocab=self._on_generate_and_check_tag_vocab_cache,
                             state_dict=self._on_get_state_dict_cache)
+                    # ? 是否要在这里加载参数，还是让用户在on_setup_mode中完成
+                    # * 如果一个Task被重复使用，那么只会在第一次加载模型的时候加载参数
+                    if self._on_get_state_dict_cache and 'model' in self._on_get_state_dict_cache:
+                        self._on_setup_model_cache.load_state_dict(
+                            self._on_get_state_dict_cache['model'])
                 parameters_or_data['model'] = self._on_setup_model_cache
                 if not hasattr(parameters_or_data['model'], 'train_step'):
                     logger.warning(
@@ -538,7 +561,7 @@ class BaseTask(BaseNode, metaclass=abc.ABCMeta):
                         topk=self.topk if self.topk != 0 else -self.topk,
                         larger_better=self.is_large_better,
                         model_save_fn=model_save_fn,
-                        monitor=self._safe_metric_factory)
+                        monitor=self.monitor)
 
                     callback = CheckpointCallback(**callback_parameters)
                     if self._on_setup_callbacks_cache is not None:
@@ -550,40 +573,34 @@ class BaseTask(BaseNode, metaclass=abc.ABCMeta):
 
                 # load_best_model 相关
 
-                # if self.load_best_model \
-                #         and isinstance(self._on_setup_metrics_cache, dict) \
-                #         and len(self._on_setup_metrics_cache) > 0 \
-                #         and self.monitor is not None \
-                #         and get_flag() == 'train':
-                #
-                #     def model_save_fn(folder):
-                #         Hub.save(
-                #             os.path.join(folder, 'model.bin'),
-                #             self.on_get_state_dict(
-                #                 model=self._on_setup_model_cache,
-                #                 data_bundle=self._on_dataset_preprocess_cache,
-                #                 tag_vocab=self.
-                #                 _on_generate_and_check_tag_vocab_cache))
-                #
-                #     def model_load_fn(folder):
-                #         self._on_get_state_dict_cache = Hub.load(
-                #             os.path.join(folder, 'model.bin'))
-                #         self._will_refresh = True
-                #
-                #     callback = LoadBestModelCallback(
-                #         monitor=self._safe_metric_factory,
-                #         model_save_fn=model_save_fn,
-                #         model_load_fn=model_load_fn,
-                #         save_folder=os.path.join(self.save_model_folder,
-                #                                  'fastie_best_model_cache'),
-                #         delete_after_train=False,
-                #         larger_better=self.is_large_better)
-                #     if self._on_setup_callbacks_cache is not None:
-                #         self._on_setup_callbacks_cache.append(callback)
-                #         parameters_or_data['callbacks'] = \
-                #             self._on_setup_callbacks_cache
-                #     else:
-                #         parameters_or_data['callbacks'] = [callback]
+                if isinstance(self._on_setup_metrics_cache, dict) \
+                        and len(self._on_setup_metrics_cache) > 0 \
+                        and self.monitor is not None \
+                        and get_flag() == 'train':
+
+                    def model_save_fn(folder):
+                        Hub.save(
+                            os.path.join(folder, 'model.bin'),
+                            self.on_get_state_dict(
+                                model=self._on_setup_model_cache,
+                                data_bundle=self._on_dataset_preprocess_cache,
+                                tag_vocab=self.
+                                _on_generate_and_check_tag_vocab_cache))
+
+                    def model_load_fn(folder):
+                        self._on_get_state_dict_cache = Hub.load(
+                            os.path.join(folder, 'model.bin'))
+                        self._will_refresh = True
+
+                    callback = LoadBestModelCallback(
+                        monitor=self.monitor,
+                        larger_better=self.is_large_better)
+                    if self._on_setup_callbacks_cache is not None:
+                        self._on_setup_callbacks_cache.append(callback)
+                        parameters_or_data['callbacks'] = \
+                            self._on_setup_callbacks_cache
+                    else:
+                        parameters_or_data['callbacks'] = [callback]
 
                 # 训练轮数
                 if get_flag() == 'train':
@@ -613,7 +630,7 @@ class BaseTask(BaseNode, metaclass=abc.ABCMeta):
     def refresh_cache(self):
         self._on_generate_and_check_tag_vocab_cache = None
         self._on_dataset_preprocess_cache = None
-        self._on_setup_model_cache = None
+        # self._on_setup_model_cache = None
         self._on_setup_callbacks_cache = None
         self._on_setup_metrics_cache = None
         self._on_setup_extra_fastnlp_parameters_cache = None
