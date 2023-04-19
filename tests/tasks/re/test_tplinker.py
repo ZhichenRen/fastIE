@@ -3,7 +3,7 @@ from tests.dummy import dummy_re_dataset
 from tests.utils import UnifiedTaskTest
 
 
-class TestUniRE(UnifiedTaskTest):
+class TestTPLinker(UnifiedTaskTest):
 
     def setup_class(self):
         super().setup_class(self,
